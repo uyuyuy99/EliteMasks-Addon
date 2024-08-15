@@ -1,0 +1,8 @@
+name: EliteMasks-Addon
+version: '${project.version}'
+main: me.uyuyuy99.elitemasksaddon.EliteMasksAddon
+api-version: 1.15
+description: Addon for EliteMasks plugin
+depend:
+  - EliteMasks
+  - ProtocolLib
