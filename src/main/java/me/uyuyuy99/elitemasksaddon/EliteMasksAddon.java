@@ -20,15 +20,16 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 public final class EliteMasksAddon extends JavaPlugin {
+
+    private Map<UUID, Integer> hashedInvs = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -77,19 +78,60 @@ public final class EliteMasksAddon extends JavaPlugin {
             }
         });
 
-//        getServer().getPluginManager().registerEvents(new Listener() {
-//
-//            @EventHandler
-//            public void onRightClick(PlayerInteractEvent event) {
-//                Player player = event.getPlayer();
-//                ItemStack item = player.getInventory().getItemInMainHand();
-//
-//                if (event.getAction() == Action.RIGHT_CLICK_AIR && item != null) {
-//                    item.setType(Material.END_ROD);
-//                }
-//            }
-//
-//        }, this);
+        BukkitRunnable checkInvTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                for (Player p : getServer().getOnlinePlayers()) {
+                    UUID uuid = p.getUniqueId();
+                    int hashCode = Arrays.hashCode(p.getInventory().getContents());
+
+                    if (!hashedInvs.containsKey(uuid) || hashedInvs.get(uuid) != hashCode) {
+                        hashedInvs.put(uuid, hashCode);
+
+                        ItemStack[] contents = p.getInventory().getContents();
+                        boolean changed = false;
+
+                        for (ItemStack item : contents) {
+                            if (item != null && item.hasItemMeta() && item.getItemMeta() instanceof SkullMeta) {
+                                SkullMeta meta = (SkullMeta) item.getItemMeta();
+
+                                Field profileField;
+                                GameProfile profile;
+                                try {
+                                    profileField = meta.getClass().getDeclaredField("profile");
+                                    profileField.setAccessible(true);
+                                    profile = (GameProfile) profileField.get(meta);
+
+                                    Optional<Property> textureProp = profile.getProperties().get("textures")
+                                            .stream()
+                                            .filter(pp -> pp.getName().equals("textures"))
+                                            .findFirst();
+
+                                    if (textureProp.isPresent()) {
+                                        String texture = textureProp.get().getValue();
+
+                                        if (ItemMask.isEndRod(texture)) {
+                                            item.setType(Material.END_ROD);
+                                        } else if (ItemMask.isBone(texture)) {
+                                            item.setType(Material.BONE);
+                                        } else if (ItemMask.isLead(texture)) {
+                                            item.setType(Material.LEAD);
+                                        }
+
+                                        changed = true;
+                                    }
+                                } catch (NoSuchFieldException | IllegalArgumentException | IllegalAccessException ignored) {}
+                            }
+                        }
+
+                        if (changed) {
+                            p.getInventory().setContents(contents);
+                        }
+                    }
+                }
+            }
+        };
+        checkInvTask.runTaskTimer(this, 1L, 1L);
     }
 
     @Override
